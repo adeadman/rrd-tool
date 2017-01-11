@@ -1,0 +1,7 @@
+#!/usr/bin/env python
+#
+# This wrapper exists purely to call rrd.py
+# This allows us to run the command `rrd <arguments` without invoking the 
+# python interpreter explicitly.
+
+import rrd
