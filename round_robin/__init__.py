@@ -32,11 +32,27 @@ class RoundRobinDb(object):
 
     @property
     def minutes(self):
-        return self.read_all('minutes')
+        values = self.read_all('minutes')
+         # Get the index of the last entered timestamp in the respective table.
+        ## The next position in the round-robin database will be the oldest.
+        last_entry_index = self.get_timestamp_index(self.last_timestamp, 'minutes')
+
+        # Our entries are in order, but the last_entry should be at the end
+        # of the list so join two splices of the list around the last_entry
+        return values[(last_entry_index + 1):] + values[:(last_entry_index+1)]
 
     @property
     def hours(self):
-        return self.read_all('hours')
+        values = self.read_all('hours')
+        # Get the timestamp corresponding to the hour-mark of the latest timestamp
+        last_timestamp_hour_ts = time_to_timestamp(
+                timestamp_to_time(self.last_timestamp)
+                .replace(minute=0, second=0, microsecond=0))
+
+        # as in the minutes() property, but looking at the hours values
+        last_entry_index = self.get_timestamp_index(last_timestamp_hour_ts, 'hours')
+        return values[(last_entry_index + 1):] + values[:(last_entry_index+1)]
+
 
     def add_timestamp(self, timestamp, value):
         # TODO find latest timestamp, and the difference between it and the new timestamp
@@ -44,15 +60,7 @@ class RoundRobinDb(object):
         pass
 
     def query(self, table):
-        values = getattr(self,table) # `table` must be 'hours' or 'minutes'
-
-        # Get the index of the last entered timestamp in the respective table.
-        ## The next position in the round-robin database will be the oldest.
-        last_entry_index = self.get_timestamp_index(self.last_timestamp, table)
-
-        # Our entries are in order, but the last_entry should be at the end
-        # of the list so join two splices of the list around the last_entry
-        return values[(last_entry_index + 1):] + values[:(last_entry_index+1)]
+        return getattr(self,table) # `table` must be 'hours' or 'minutes'
 
     def save(self, timestamp, value):
         print("Called RoundRobinDB")
