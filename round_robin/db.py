@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import sqlite3
-from . import RoundRobinDb
+from . import RoundRobinDb, range_func
 
 """The interface between the python logic and the SQLite database.
 
@@ -54,7 +54,7 @@ class SqliteRoundRobinDb(RoundRobinDb):
         cur = self.connection.cursor()
         initialized = True
         try:
-            cur.execute("SELECT * FROM Meta;")
+            cur.execute("SELECT * FROM Hours LIMIT 1;")
         except sqlite3.OperationalError:
             initialized = False
 
@@ -65,10 +65,8 @@ class SqliteRoundRobinDb(RoundRobinDb):
         
         # Set up our empty RRD database
         cur.executescript("""
-            DROP TABLE IF EXISTS Meta;
             DROP TABLE IF EXISTS Minutes;
             DROP TABLE IF EXISTS Hours;
-            CREATE TABLE Meta(Name TEXT PRIMARY KEY, Value TEXT);
             CREATE TABLE Minutes(Id INTEGER PRIMARY KEY, Timestamp INTEGER, Value REAL);
             CREATE TABLE Hours(Id INTEGER PRIMARY KEY, Timestamp INTEGER, Value REAL);
             """)
@@ -112,21 +110,19 @@ class SqliteRoundRobinDb(RoundRobinDb):
                     " ORDER BY id);") # discard the id value
         return cur.fetchall()
 
-        
-
     @property
     def last_timestamp(self):
         if hasattr(self, '_last_timestamp') and self._last_timestamp is not None:
             return self._last_timestamp # use memoization to save a DB call
 
         cur = self.connection.cursor()
-        cur.execute("SELECT name, value FROM Meta WHERE name='last_timestamp';")
-        last_ts = cur.fetchone()[1]
+        cur.execute("SELECT timestamp FROM Minutes ORDER BY timestamp DESC LIMIT 1;")
+        last_ts = cur.fetchone()[0]
         self._last_timestamp = last_ts
 
         return self._last_timestamp
 
-    def get_timestamp_index(self, timestamp, table):
+    def get_timestamp_index(self, timestamp, table, default=None):
         """Resolve timestamp to database index."""
         # Call superclass for things like parameter sanitizing, etc.
         super(self.__class__, self).get_timestamp_index(timestamp, table)
@@ -136,6 +132,42 @@ class SqliteRoundRobinDb(RoundRobinDb):
         index = cur.fetchone()
         if index is None:
             # means this is a new database, so start storing at index 0.
-            return 0
+            return default
         else:
             return index[0]
+
+    def get_timestamp_value(self, timestamp):
+        """Query database for value associated with specified timestamp.
+
+        Only implemented for Minutes database table, as it's only used for updates."""
+        cur = self.connection.cursor()
+        cur.execute("SELECT value FROM Minutes WHERE timestamp=?;", (timestamp,))
+        value = cur.fetchone()
+        return value[0]
+
+    def update_timestamp(self, timestamp, value):
+        # Get the index of the specified timestamp. If it's not found, default to None
+        ts_index = self.get_timestamp_index(timestamp, 'Minutes')
+        if ts_index is None:
+            raise ValueError("Timestamp does not exist in the database.")
+        else:
+            cur = self.connection.cursor()
+            cur.execute("UPDATE Minutes SET Value=? WHERE Id=?;", (value, ts_index))
+            self.connection.commit()
+
+    def add_timestamps(self, data):
+        cur = self.connection.cursor()
+        
+        # Update values in the `Minute` table
+        start_index = self.get_timestamp_index(self.last_timestamp, 'Minutes') + 1
+        for ix in range_func(len(data)):
+            ts, value = data[ix]
+            cur.execute("UPDATE Minutes SET Timestamp=?, Value=? WHERE Id=?;",
+                                (ts, value, (ix + start_index) % 60))
+            
+
+        # Update values in the `Hour` table TODO`
+
+
+
+        self.connection.commit()

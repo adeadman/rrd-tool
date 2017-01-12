@@ -29,6 +29,7 @@ class Rrdtool(object):
     def save(self, timestamp, value):
         """Save the specified value in the RRD at the given timestamp."""
         print("Save called - store %f at %d timestamp" % (value, timestamp))
+        self.rrd.save(timestamp, value)
 
     def close_db(self):
         """Close connection to the database, if necessary."""
