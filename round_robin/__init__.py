@@ -12,6 +12,11 @@ else:
 # Helper functions to convert between timestamps and datetimeobjects
 timestamp_to_time = lambda t: datetime.datetime.fromtimestamp(t)
 time_to_timestamp = lambda t: int(t.strftime('%s'))
+# Helper function to get base minute and hour from second-level timestamps
+timestamp_minute = lambda t: time_to_timestamp(timestamp_to_time(t)
+                        .replace(second=0, microsecond=0))
+timestamp_hour = lambda t: time_to_timestamp(timestamp_to_time(t)
+                        .replace(minute=0, second=0, microsecond=0))
 
 class RoundRobinDb(object):
     """ An abstract RoundRobinDb that can be implemented with a backing subclass.
@@ -34,32 +39,37 @@ class RoundRobinDb(object):
     @abc.abstractmethod
     def get_timestamp_index(self, timestamp, table, default=None):
         """Find the index in the RRD for the specified timestamp."""
+        # Do some basic input validation (prevent SQL injection)
         assert (table.lower() == "minutes" or table.lower() == "hours"), \
                 "Table name must be 'Minutes' or 'Hours'"
+        assert(isinstance(timestamp, (int, long)) or timestamp is None), \
+                "Timestamp must be an integer"
 
     @abc.abstractmethod
-    def get_timestamp_value(self, timestamp):
+    def get_timestamp_value(self, table, timestamp):
         """Retrieve the value for the specified timestamp.
 
         Returns `None` if the timestamp is not in the database."""
         return NotImplemented
 
     @abc.abstractmethod
-    def add_timestamps(self, data):
+    def save_timestamps(self, data):
         """Add timestamps and values to the database.
 
         Subclasses should override this method to use their own storage.
         
         Keyword Arguments:
-        data -- a list of tuples of format [(timestamp, value),..] in ascending timestamp order
+        data -- a dictionary with two entries, 'minutes' and 'hours'
+                each entry's value is a list of tuples of format 
+                [(timestamp, value),..] in ascending timestamp order
         """
         return NotImplemented
 
     @abc.abstractmethod
-    def update_timestamp(self, timestamp, data):
-        """Update the RRD's timestamp entry.
+    def update_timestamp(self, table, timestamp, data):
+        """Update the RRD's timestamp entry in the specified table.
 
-        Throws ValueError if the timestamp is not found in the database.
+        Throws ValueError if the timestamp is not found.
         """
         return NotImplemented
 
@@ -67,10 +77,7 @@ class RoundRobinDb(object):
     def last_hour_timestamp(self):
         # Get the timestamp corresponding to the hour-mark of the latest timestamp
         # If the last timestamp is `None` (new database), do not try to find the hour
-        return None if not self.last_timestamp else time_to_timestamp(
-                timestamp_to_time(self.last_timestamp)
-                .replace(minute=0, second=0, microsecond=0)
-            )
+        return timestamp_hour(self.last_timestamp) if self.last_timestamp else None
 
     @property
     def minutes(self):
@@ -98,24 +105,35 @@ class RoundRobinDb(object):
     def save(self, timestamp, value):
         # First let's truncate our timestamp to the nearest "minute" value, as 
         # noted in the `Design Consideration` section of the README
-        minute_ts = time_to_timestamp(timestamp_to_time(timestamp)
-                                     .replace(second=0, microsecond=0))
+        minute_ts = timestamp_minute(timestamp)
+        hour_ts = timestamp_hour(timestamp)
 
-        print("minute_ts for this timestamp is set to %d" % minute_ts)
-        if minute_ts == self.last_timestamp:
+        if minute_ts < self.last_timestamp:
+            raise ValueError("Timestamp must be greater than %s" % self.last_timestamp)
+        elif minute_ts == self.last_timestamp:
             # This is essentially an update to the recently-added value. Technically
             # it's allowed according to the Design Considerations, but is probably
             # not what the user wants (if they're calling the ``rrd save`` command
             # more than once per minute, this situation may occur). 
             print("Warning: updating existing timestamp with new value!")
-            # Update record to be the mean of this value and the saved value
-            self.update_timestamp(minute_ts, 
-                                  (self.get_timestamp_value(minute_ts)+value)/2)
+            # Update record to be the min of this value and the saved value
+            self.update_timestamp('Minutes', minute_ts, min(
+                        self.get_timestamp_value('Minutes', minute_ts), value))
+            self.update_timestamp('Hours', hour_ts, min(
+                        self.get_timestamp_value('Hours', hour_ts), value))
         else:
+            # Data object to be passed to the backing storage implementation
+            data={}
+            
             # Find out how many seconds have elapsed since the previous entry, and create
             # a list of up to 59 previous entries with `None` values to correspond to
             # entries that have been missed
-            elapsed_secs = minute_ts - self.last_timestamp
+            if self.last_timestamp:
+                elapsed_secs = minute_ts - self.last_timestamp
+            else:
+                # New database
+                elapsed_secs = 0
+
             elapsed_values = [(minute_ts - t, None) for t in 
                     range_func(60, min(elapsed_secs,60**2), 60)]
             # The above list comprehension returns the values in descending order, so 
@@ -123,10 +141,35 @@ class RoundRobinDb(object):
             elapsed_values.reverse()
 
             # Add our elapsed values and the latest value (list size is max 60)
-            self.add_timestamps(elapsed_values + [(minute_ts, value)])
+            data['minutes'] = elapsed_values + [(minute_ts, value)]
 
-        
+            # If current timestamp's hour > last_saved_hour,
+            # add a new hour entry with value set to value being saved.
+            # if there are intermediate hourly values, create those too with
+            # `None` value. If there are none, then update the hour value to
+            # be the minimum of its current value and the new value.
 
+            if self.last_hour_timestamp:
+                elapsed_secs = minute_ts - self.last_hour_timestamp
+            else:
+                # New database
+                elapsed_secs = 0
+
+            elapsed_hour_values = [(hour_ts - t, None) for t in
+                    range_func(60**2, min(elapsed_secs, 24*60**2), 60**2)]
+            elapsed_hour_values.reverse()
+
+            if hour_ts == self.last_hour_timestamp:
+                # just update the hours value without adding new hours.
+                # We don't need to read from the DB, because we can only add
+                # one timestamp at a time and each save will update this value
+                # as appropriate.
+                self.update_timestamp('Hours', hour_ts, min(
+                        self.get_timestamp_value('Hours', hour_ts), value))
+                data['hours'] = []
+            else:
+                data['hours'] = elapsed_hour_values + [(hour_ts, value)]
+            self.save_timestamps(data)
 
 def open_database(backing):
     """ Open a connection to a Round Robin Database.

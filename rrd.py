@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-from __future__ import print_function
+from __future__ import print_function, division
 
 import os
+import sys
 import argparse
 import round_robin
 
@@ -22,14 +23,35 @@ class Rrdtool(object):
 
     def query(self, db):
         """Query the specified RRD and output all values and a summary."""
-        print("Query called for the %s database" % db)
-        values = self.rrd.query(db) 
-        print("Values are %r" % values)
+        entries = self.rrd.query(db) 
+        count_values, total = 0,0
+        smallest, largest = None, None
+        for ts, value in entries:
+            if ts is not None:
+                if value is not None:
+                    count_values += 1
+                    total += value
+                    if largest is None or value > largest:
+                        largest = value
+                    if smallest is None or value < smallest:
+                        smallest = value
+
+                    print("%d, %f" %(ts, value))
+                else:
+                    print("%d, NULL" % ts)
+        if ts is None and count_values == 0:
+            print("Database is empty. Please add some values.")
+        else:
+            print("%s: min: %r, avg: %r, max: %r" % (db, smallest,
+                (total/count_values) if count_values > 0 else float('nan'), largest))
 
     def save(self, timestamp, value):
         """Save the specified value in the RRD at the given timestamp."""
-        print("Save called - store %f at %d timestamp" % (value, timestamp))
-        self.rrd.save(timestamp, value)
+        try:
+            self.rrd.save(timestamp, value)
+        except ValueError as e:
+            print(e.message, file=sys.stderr)
+            sys.exit(1) # Error
 
     def close_db(self):
         """Close connection to the database, if necessary."""

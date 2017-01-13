@@ -71,8 +71,6 @@ class SqliteRoundRobinDb(RoundRobinDb):
             CREATE TABLE Hours(Id INTEGER PRIMARY KEY, Timestamp INTEGER, Value REAL);
             """)
 
-        cur.execute("INSERT INTO Meta VALUES('last_timestamp',?);",(None,))
-
         # Create empty entries for our RRD
         mins = [(i, None, None) for i in xrange(60)]
         hours = [(i, None, None) for i in xrange(24)]
@@ -81,6 +79,11 @@ class SqliteRoundRobinDb(RoundRobinDb):
         cur.executemany("INSERT INTO Hours VALUES(?, ?, ?);", hours)
         
         self.connection.commit()
+
+    def _update_table_row(self, table, id, timestamp, value):
+        cur = self.connection.cursor()
+        cur.execute("UPDATE "+table+" SET Timestamp=?, Value=? WHERE Id=?;", 
+                (timestamp, value, id))
 
     def read_all(self, table):
         """Read all values from the specified table.
@@ -136,38 +139,37 @@ class SqliteRoundRobinDb(RoundRobinDb):
         else:
             return index[0]
 
-    def get_timestamp_value(self, timestamp):
-        """Query database for value associated with specified timestamp.
-
-        Only implemented for Minutes database table, as it's only used for updates."""
+    def get_timestamp_value(self, table, timestamp):
+        """Query database table for value associated with specified timestamp."""
         cur = self.connection.cursor()
-        cur.execute("SELECT value FROM Minutes WHERE timestamp=?;", (timestamp,))
+        # look up based on Id rather than timestamp, to get the input checking 
+        # from get_timestamp_index()
+        cur.execute("SELECT value FROM "+table+" WHERE Id=?;", (
+                        self.get_timestamp_index(timestamp, table, default=None),))
         value = cur.fetchone()
         return value[0]
 
-    def update_timestamp(self, timestamp, value):
+    def update_timestamp(self, table, timestamp, value):
         # Get the index of the specified timestamp. If it's not found, default to None
-        ts_index = self.get_timestamp_index(timestamp, 'Minutes')
+        ts_index = self.get_timestamp_index(timestamp, table)
         if ts_index is None:
             raise ValueError("Timestamp does not exist in the database.")
         else:
-            cur = self.connection.cursor()
-            cur.execute("UPDATE Minutes SET Value=? WHERE Id=?;", (value, ts_index))
+            self._update_table_row(table, ts_index, timestamp, value)
             self.connection.commit()
 
-    def add_timestamps(self, data):
-        cur = self.connection.cursor()
-        
+    def save_timestamps(self, data):
         # Update values in the `Minute` table
-        start_index = self.get_timestamp_index(self.last_timestamp, 'Minutes') + 1
-        for ix in range_func(len(data)):
-            ts, value = data[ix]
-            cur.execute("UPDATE Minutes SET Timestamp=?, Value=? WHERE Id=?;",
-                                (ts, value, (ix + start_index) % 60))
+        start_index = self.get_timestamp_index(self.last_timestamp, 'Minutes', -1) + 1
+        for ix in range_func(len(data['minutes'])):
+            ts, value = data['minutes'][ix]
+            self._update_table_row('Minutes', (ix + start_index) % 60, ts, value)
             
 
         # Update values in the `Hour` table TODO`
-
-
+        start_index = self.get_timestamp_index(self.last_hour_timestamp, 'Hours', -1) + 1
+        for ix in range_func(len(data['hours'])):
+            ts, value = data['hours'][ix]
+            self._update_table_row('Hours', (ix + start_index) % 60, ts, value)
 
         self.connection.commit()
