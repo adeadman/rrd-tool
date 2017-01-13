@@ -73,8 +73,8 @@ class SqliteRoundRobinDb(RoundRobinDb):
             """)
 
         # Create empty entries for our RRD
-        mins = [(i, None, None) for i in xrange(60)]
-        hours = [(i, None, None) for i in xrange(24)]
+        mins = [(i, None, None) for i in range_func(60)]
+        hours = [(i, None, None) for i in range_func(24)]
 
         cur.executemany("INSERT INTO Minutes VALUES(?, ?, ?);", mins)
         cur.executemany("INSERT INTO Hours VALUES(?, ?, ?);", hours)
