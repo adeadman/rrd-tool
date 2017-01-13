@@ -36,13 +36,14 @@ class Rrdtool(object):
                     if smallest is None or value < smallest:
                         smallest = value
 
-                    print("%d, %f" %(ts, value))
+                    # Choosing 2 decimal place precision
+                    print("%d, %.2f" %(ts, value))
                 else:
                     print("%d, NULL" % ts)
         if ts is None and count_values == 0:
             print("Database is empty. Please add some values.")
         else:
-            print("%s: min: %r, avg: %r, max: %r" % (db, smallest,
+            print("%s: min: %r, avg: %.2f, max: %r" % (db, smallest,
                 (total/count_values) if count_values > 0 else float('nan'), largest))
 
     def save(self, timestamp, value):

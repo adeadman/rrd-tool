@@ -46,6 +46,7 @@ class SqliteRoundRobinDb(RoundRobinDb):
         if self.connection:
             self.connection.close()        
 
+    # Internal method
     def _check_and_init_db(self):
         """ Check if database is initalized, and initializes if not.
 
@@ -80,11 +81,13 @@ class SqliteRoundRobinDb(RoundRobinDb):
         
         self.connection.commit()
 
+    # Internal method
     def _update_table_row(self, table, id, timestamp, value):
         cur = self.connection.cursor()
         cur.execute("UPDATE "+table+" SET Timestamp=?, Value=? WHERE Id=?;", 
                 (timestamp, value, id))
 
+    # Subclass method
     def read_all(self, table):
         """Read all values from the specified table.
 
@@ -125,6 +128,7 @@ class SqliteRoundRobinDb(RoundRobinDb):
 
         return self._last_timestamp
 
+    # Subclass method
     def get_timestamp_index(self, timestamp, table, default=None):
         """Resolve timestamp to database index."""
         # Call superclass for things like parameter sanitizing, etc.
@@ -139,17 +143,22 @@ class SqliteRoundRobinDb(RoundRobinDb):
         else:
             return index[0]
 
+    # Subclass method
     def get_timestamp_value(self, table, timestamp):
         """Query database table for value associated with specified timestamp."""
+        # Call superclass for things like parameter sanitizing, etc.
+        super(self.__class__, self).get_timestamp_value(table, timestamp)
+
         cur = self.connection.cursor()
-        # look up based on Id rather than timestamp, to get the input checking 
-        # from get_timestamp_index()
-        cur.execute("SELECT value FROM "+table+" WHERE Id=?;", (
-                        self.get_timestamp_index(timestamp, table, default=None),))
+        cur.execute("SELECT value FROM "+table+" WHERE Timestamp=?;", (timestamp,))
         value = cur.fetchone()
         return value[0]
 
+    # Subclass method
     def update_timestamp(self, table, timestamp, value):
+        # Call superclass for things like parameter sanitizing, etc.
+        super(self.__class__, self).update_timestamp(table, timestamp, value)
+
         # Get the index of the specified timestamp. If it's not found, default to None
         ts_index = self.get_timestamp_index(timestamp, table)
         if ts_index is None:
@@ -158,6 +167,7 @@ class SqliteRoundRobinDb(RoundRobinDb):
             self._update_table_row(table, ts_index, timestamp, value)
             self.connection.commit()
 
+    # Subclass method
     def save_timestamps(self, data):
         # Update values in the `Minute` table
         start_index = self.get_timestamp_index(self.last_timestamp, 'Minutes', -1) + 1

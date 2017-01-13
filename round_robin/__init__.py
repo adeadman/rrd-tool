@@ -27,6 +27,11 @@ class RoundRobinDb(object):
     # Since this is an abstract base class, use ABCMeta to have useful abstract decorators
     __metaclass__ = abc.ABCMeta
     
+    def _validate_tablename(self, name):
+        """A shared method to validate the tablename is either `Minutes` or `Hours`."""
+        assert(name.lower() == "minutes" or name.lower() == "hours"), \
+                "Table name must be 'Minutes' or 'Hours'"
+
     @abc.abstractmethod
     def read_all(self, table):
         return NotImplemented
@@ -40,17 +45,14 @@ class RoundRobinDb(object):
     def get_timestamp_index(self, timestamp, table, default=None):
         """Find the index in the RRD for the specified timestamp."""
         # Do some basic input validation (prevent SQL injection)
-        assert (table.lower() == "minutes" or table.lower() == "hours"), \
-                "Table name must be 'Minutes' or 'Hours'"
-        assert(isinstance(timestamp, (int, long)) or timestamp is None), \
-                "Timestamp must be an integer"
+        self._validate_tablename(table)
 
     @abc.abstractmethod
     def get_timestamp_value(self, table, timestamp):
         """Retrieve the value for the specified timestamp.
 
         Returns `None` if the timestamp is not in the database."""
-        return NotImplemented
+        self._validate_tablename(table)
 
     @abc.abstractmethod
     def save_timestamps(self, data):
@@ -71,7 +73,7 @@ class RoundRobinDb(object):
 
         Throws ValueError if the timestamp is not found.
         """
-        return NotImplemented
+        self._validate_tablename(table)
 
     @property
     def last_hour_timestamp(self):
