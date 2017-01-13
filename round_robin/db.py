@@ -183,3 +183,6 @@ class SqliteRoundRobinDb(RoundRobinDb):
             self._update_table_row('Hours', (ix + start_index) % 60, ts, value)
 
         self.connection.commit()
+
+        # Invalidate memoized last timestamp, as it is no longer valid.
+        self._last_timestamp = None

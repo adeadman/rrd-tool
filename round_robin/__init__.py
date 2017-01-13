@@ -151,7 +151,7 @@ class RoundRobinDb(object):
             # `None` value. If there are none, then update the hour value to
             # be the minimum of its current value and the new value.
 
-            if self.last_hour_timestamp:
+            if self.last_hour_timestamp is not None:
                 elapsed_secs = minute_ts - self.last_hour_timestamp
             else:
                 # New database
