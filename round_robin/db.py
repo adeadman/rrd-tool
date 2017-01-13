@@ -180,7 +180,7 @@ class SqliteRoundRobinDb(RoundRobinDb):
         start_index = self.get_timestamp_index(self.last_hour_timestamp, 'Hours', -1) + 1
         for ix in range_func(len(data['hours'])):
             ts, value = data['hours'][ix]
-            self._update_table_row('Hours', (ix + start_index) % 60, ts, value)
+            self._update_table_row('Hours', (ix + start_index) % 24, ts, value)
 
         self.connection.commit()
 
