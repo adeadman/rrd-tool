@@ -110,7 +110,7 @@ class RoundRobinDb(object):
         minute_ts = timestamp_minute(timestamp)
         hour_ts = timestamp_hour(timestamp)
 
-        if minute_ts < self.last_timestamp:
+        if self.last_timestamp is not None and minute_ts < self.last_timestamp:
             raise ValueError("Timestamp must be greater than %s" % self.last_timestamp)
         elif minute_ts == self.last_timestamp:
             # This is essentially an update to the recently-added value. Technically
