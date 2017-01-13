@@ -51,7 +51,7 @@ class Rrdtool(object):
         try:
             self.rrd.save(timestamp, value)
         except ValueError as e:
-            print(e.message, file=sys.stderr)
+            print(str(e), file=sys.stderr)
             sys.exit(1) # Error
 
     def close_db(self):
