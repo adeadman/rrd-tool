@@ -47,7 +47,7 @@ class HelperFunctionsTest(unittest.TestCase):
                          rr.timestamp_hour(atimestamp),
                          "timestamp_hour() function failing.")
 
-class RoundRobinDbTests(unittest.TestCase):
+class RoundRobinDbSaveTests(unittest.TestCase):
     good_data = [( 60, 25.0),
                  (120, 30.0),
                  (180, 35.0),
@@ -97,4 +97,39 @@ class RoundRobinDbTests(unittest.TestCase):
         self.assertIsNone(hours[-2][1], "Interim hour value not None.")
 
 
+class RoundRobinDbUQueryTests(unittest.TestCase):
+    good_data = [(min*60, min*5 + 20.0) for min in range(0,62)]
 
+    def setUp(self):
+        self.rrd = rr.open_database(('SQLite', TEST_DB))
+        # Save our test data in the database
+        for ts, val in self.good_data:
+            self.rrd.save(ts, val)
+
+    def tearDown(self):
+        os.remove(TEST_DB)
+
+    def testMinutesQuery(self):
+        # Testing minutes property
+        mins = self.rrd.minutes
+        
+        # Test that our 62 entries have not overflown the RRD
+        # and that the final entry in our minutes property is
+        # the final entry of good data.
+        self.assertEqual(60, len(mins))
+        self.assertEqual(self.good_data[-1], mins[-1])
+
+    def testHoursQuery(self):
+        # Test query method with `hours` argument
+        hours = self.rrd.query('hours')
+
+        # Test that our 62 entries have properly moved the second
+        # hour into the RRD 
+        self.assertIsNone(hours[-3][0]) # guard value
+        self.assertIsNotNone(hours[-2][0])
+        self.assertIsNotNone(hours[-2][1])
+        self.assertIsNotNone(hours[-1][0])
+        self.assertIsNotNone(hours[-1][1])
+        # and that our first data entry's value
+        # has kept the minimum value from good_data[0]
+        self.assertEqual(self.good_data[0], hours[-2])
