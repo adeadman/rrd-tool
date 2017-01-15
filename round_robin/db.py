@@ -176,7 +176,7 @@ class SqliteRoundRobinDb(RoundRobinDb):
             self._update_table_row('Minutes', (ix + start_index) % 60, ts, value)
             
 
-        # Update values in the `Hour` table TODO`
+        # Update values in the `Hour` table 
         start_index = self.get_timestamp_index(self.last_hour_timestamp, 'Hours', -1) + 1
         for ix in range_func(len(data['hours'])):
             ts, value = data['hours'][ix]

@@ -34,11 +34,20 @@ class RoundRobinDb(object):
 
     @abc.abstractmethod
     def read_all(self, table):
+        """Read all values from the specified table.
+
+        Keyword arguments:
+        table -- One of 'minutes' or 'hours'
+
+        Returns:
+        a list of (timestamp, value) tuples representing the state of the table
+        ordered by timestamp value ascending."""
+        # This must be implemented by a subclass.
         return NotImplemented
 
     @abc.abstractproperty
     def last_timestamp(self):
-        """Read-only property - get the last-saved timestamp in the database."""
+        """Read-only property - the last-saved timestamp in the database."""
         return NotImplemented
 
     @abc.abstractmethod
@@ -77,12 +86,16 @@ class RoundRobinDb(object):
 
     @property
     def last_hour_timestamp(self):
+        """The most recent timestamp in the `hour` table."""
         # Get the timestamp corresponding to the hour-mark of the latest timestamp
         # If the last timestamp is `None` (new database), do not try to find the hour
-        return timestamp_hour(self.last_timestamp) if self.last_timestamp else None
+        if self.last_timestamp is None:
+            return None
+        return timestamp_hour(self.last_timestamp)
 
     @property
     def minutes(self):
+        """An ordered list of all `minutes` entries in our RRD."""
         values = self.read_all('minutes')
         # Get the index of the last entered timestamp in the respective table.
         # The next position in the round-robin database will be the oldest.
@@ -95,6 +108,7 @@ class RoundRobinDb(object):
 
     @property
     def hours(self):
+        """An ordered list of all `hours` entries in our RRD."""
         values = self.read_all('hours')
         # Reorder as in the minutes() property, but looking at the hours values
         last_entry_index = self.get_timestamp_index(self.last_hour_timestamp,
