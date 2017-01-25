@@ -17,8 +17,9 @@ class Rrdtool(object):
     def __init__(self):
         # User can pass in the database they want to use as an environment var
         # or it defaults to rrd-data in the current working directory
-        db_file = os.getenv('RRD_DATABASE', os.path.join(os.getcwd(),'rrd-data.db'))
-        rrd_backing = ('SQLite', db_file)
+        rrd_backing = os.getenv('RRD_DATABASE',
+                ":/".join(["SQLite", os.path.join(os.getcwd(),'rrd-data.db')]))
+        rrd_backing = rrd_backing.split(":/")
         self.rrd = round_robin.open_database(rrd_backing)
 
     def query(self, db):
@@ -40,7 +41,7 @@ class Rrdtool(object):
                     print("%d, %.2f" %(ts, value))
                 else:
                     print("%d, NULL" % ts)
-        if ts is None and count_values == 0:
+        if count_values == 0:
             print("Database is empty. Please add some values.")
         else:
             print("%s: min: %r, avg: %.2f, max: %r" % (db, smallest,

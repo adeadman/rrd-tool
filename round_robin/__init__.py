@@ -199,8 +199,12 @@ def open_database(backing):
     A RoundRobinDb object.
     """
     engine,db_path = backing
-    assert (engine == "SQLite"),"Only SQLite backing is supported."
+    assert (engine.lower() in ["sqlite","redis"]),"Only SQLite and Redis backings supported."
 
-    # We only support SQLite3 at the moment, defined in the db.py module
-    from . import db
-    return db.SqliteRoundRobinDb(db_path)
+    if engine.lower() == "sqlite":
+        # We only support SQLite3 at the moment, defined in the db.py module
+        from . import db
+        return db.SqliteRoundRobinDb(db_path)
+    elif engine == "redis":
+        from . import redisdb
+        return redisdb.RedisRoundRobinDb(db_path)
